@@ -1,7 +1,7 @@
-use std::fs;
 use std::io::BufRead;
+use std::{cmp, fs};
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
 // https://github.com/matklad/once_cell/blob/master/examples/regex.rs
 macro_rules! regex {
@@ -93,7 +93,7 @@ impl Game {
         Ok(Self { id: game_id, sets })
     }
 
-    fn check_possible(&self, bag: &Bag) -> Result<(), String> {
+    pub fn check_possible(&self, bag: &Bag) -> Result<(), String> {
         let mut impossible: Vec<String> = Vec::new();
         for (set_idx, set) in self.sets.iter().enumerate() {
             let setno = set_idx + 1;
@@ -108,33 +108,64 @@ impl Game {
             return Err(impossible.join(" "));
         }
     }
+
+    fn compute_power(&self) -> u64 {
+        let mut smallest_bag = Bag {
+            blue: 0,
+            green: 0,
+            red: 0,
+        };
+        for set in self.sets.iter() {
+            smallest_bag.blue = cmp::max(smallest_bag.blue, set.blue);
+            smallest_bag.green = cmp::max(smallest_bag.green, set.green);
+            smallest_bag.red = cmp::max(smallest_bag.red, set.red);
+        }
+        let power = smallest_bag.blue * smallest_bag.green * smallest_bag.red;
+        power
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum PuzzlePart {
+    One,
+    Two,
 }
 
 #[derive(Parser, Debug)]
 #[command()]
 struct Args {
     path: String,
+
+    #[arg(short, long, value_enum)]
+    part: PuzzlePart,
 }
 
-fn main() -> Result<(), String> {
-    let args = Args::parse();
-
-    let file = fs::File::open(args.path).map_err(|err| err.to_string())?;
+fn iter_games(path: &str) -> Result<impl Iterator<Item = Result<Game, String>>, String> {
+    let file = fs::File::open(path).map_err(|err| err.to_string())?;
     let reader = std::io::BufReader::new(file);
 
+    return Ok(reader
+        .lines()
+        .enumerate()
+        .map(|(line_idx, line)| -> Result<Game, String> {
+            let lineno = line_idx + 1;
+            let line = line.map_err(|err| format!("Encountered error on line {lineno}. {err}"))?;
+
+            let game = Game::parse(&line)
+                .map_err(|err| format!("Failed parsing game on line {}: {line}. {err}", lineno))?;
+            Ok(game)
+        }));
+}
+
+fn run_1(path: &str) -> Result<(), String> {
     let bag = Bag {
         red: 12,
         green: 13,
         blue: 14,
     };
     let mut acc: u64 = 0;
-    for (line_idx, line) in reader.lines().enumerate() {
-        let lineno = line_idx + 1;
-        let line = line.map_err(|err| format!("Encountered error on line {lineno}. {err}"))?;
-
-        let game = Game::parse(&line)
-            .map_err(|err| format!("Failed parsing game on line {}: {line}. {err}", lineno))?;
-
+    for game in iter_games(path)? {
+        let game = game?;
         match game.check_possible(&bag) {
             Ok(_) => acc += game.id,
             Err(err) => eprintln!("Game {} is not possible. {}", game.id, err),
@@ -143,4 +174,25 @@ fn main() -> Result<(), String> {
     println!("Answer: {acc}");
 
     Ok(())
+}
+
+fn run_2(path: &str) -> Result<(), String> {
+    let mut acc: u64 = 0;
+    for game in iter_games(path)? {
+        let game = game?;
+        let power = game.compute_power();
+        acc += power;
+    }
+    println!("Answer: {acc}");
+
+    Ok(())
+}
+
+fn main() -> Result<(), String> {
+    let args = Args::parse();
+
+    match args.part {
+        PuzzlePart::One => run_1(&args.path),
+        PuzzlePart::Two => run_2(&args.path),
+    }
 }
