@@ -2,34 +2,43 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::BufRead;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
-// #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-// enum PuzzlePart {
-//     One,
-//     Two,
-// }
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum PuzzlePart {
+    One,
+    Two,
+}
 
 #[derive(Parser, Debug)]
 #[command()]
 struct Args {
     path: String,
-    // #[arg(short, long, value_enum)]
-    // part: PuzzlePart,
+
+    #[arg(short, long, value_enum)]
+    part: PuzzlePart,
 }
 
 fn main() -> Result<(), String> {
     let args = Args::parse();
 
-    let path = args.path;
+    match args.part {
+        PuzzlePart::One => run_1(&args.path),
+        PuzzlePart::Two => run_2(&args.path),
+    }
+}
+
+fn run_1(path: &String) -> Result<(), String> {
     let file = fs::File::open(&path).map_err(|err| err.to_string())?;
     let mut reader = std::io::BufReader::new(file);
 
     let grid = parse_grid(&mut reader);
 
     let mut acc: u64 = 0;
+    // NOTE: Turns out this isn't necessary, but oh well.
     let mut numbers_seen: HashSet<NumberId> = HashSet::new();
     for (y, row) in grid.rows.iter().enumerate() {
+        // xxx
         for symbol in &row.symbols {
             for number in find_adjancent_to_symbol(&symbol, y, &grid) {
                 let first_seen = numbers_seen.insert(number.id);
@@ -40,6 +49,11 @@ fn main() -> Result<(), String> {
         }
     }
     println!("Answer: {acc}");
+    Ok(())
+}
+
+fn run_2(path: &String) -> Result<(), String> {
+    println!("{path}");
     Ok(())
 }
 
@@ -89,6 +103,22 @@ fn parse_line(line: &str, id_gen: &mut IdGenerator) -> Line {
     let mut number_start: usize = 0;
     let mut number_end: usize = 0;
 
+    // DISCUSS: GAH, hard to write small helper closures that need to mutate things.
+    // Captures mutable references to `numbers` and `id_gen`.
+    let mut maybe_flush_number =
+        |number_string: &mut Option<String>, number_start: usize, number_end: usize| -> () {
+            // Maybe flush the current number
+            if let Some(ref string_curr) = number_string.take() {
+                let value = string_curr.parse::<u64>().unwrap();
+                numbers.push(Number {
+                    id: id_gen.next(),
+                    value,
+                    start_x: number_start,
+                    end_x: number_end,
+                });
+            }
+        };
+
     for (idx, c) in line.char_indices() {
         if c.is_ascii_digit() {
             match number_string {
@@ -105,22 +135,15 @@ fn parse_line(line: &str, id_gen: &mut IdGenerator) -> Line {
                 }
             };
         } else {
-            // Maybe flush the current number
-            if let Some(ref string_curr) = number_string.take() {
-                let value = string_curr.parse::<u64>().unwrap();
-                numbers.push(Number {
-                    id: id_gen.next(),
-                    value,
-                    start_x: number_start,
-                    end_x: number_end,
-                });
-            }
+            maybe_flush_number(&mut number_string, number_start, number_end);
             // Maybe add symbol
             if c != '.' {
                 symbols.push(Symbol { value: c, x: idx });
             }
         }
     }
+    // Also need to flush numbers that run until the end of the line
+    maybe_flush_number(&mut number_string, number_start, number_end);
     Line { numbers, symbols }
 }
 
@@ -182,7 +205,7 @@ mod test_parse_line {
     #[test]
     fn it_works() {
         let mut id_gen = IdGenerator::new();
-        let line_str = "467..*114$..#";
+        let line_str = "467..*114$..#9";
         let line = parse_line(line_str, &mut id_gen);
 
         assert_eq!(
@@ -199,6 +222,12 @@ mod test_parse_line {
                     value: 114,
                     start_x: 6,
                     end_x: 8,
+                },
+                Number {
+                    id: 2,
+                    value: 9,
+                    start_x: 13,
+                    end_x: 13,
                 }
             ]
         );
