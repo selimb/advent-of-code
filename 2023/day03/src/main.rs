@@ -38,7 +38,6 @@ fn run_1(path: &String) -> Result<(), String> {
     // NOTE: Turns out this isn't necessary, but oh well.
     let mut numbers_seen: HashSet<NumberId> = HashSet::new();
     for (y, row) in grid.rows.iter().enumerate() {
-        // xxx
         for symbol in &row.symbols {
             for number in find_adjancent_to_symbol(&symbol, y, &grid) {
                 let first_seen = numbers_seen.insert(number.id);
@@ -53,7 +52,23 @@ fn run_1(path: &String) -> Result<(), String> {
 }
 
 fn run_2(path: &String) -> Result<(), String> {
-    println!("{path}");
+    let file = fs::File::open(&path).map_err(|err| err.to_string())?;
+    let mut reader = std::io::BufReader::new(file);
+
+    let grid = parse_grid(&mut reader);
+
+    let mut acc: u64 = 0;
+    for (y, row) in grid.rows.iter().enumerate() {
+        for symbol in row.symbols.iter().filter(|&s| s.value == '*') {
+            let adjacent = find_adjancent_to_symbol(&symbol, y, &grid);
+            if adjacent.len() != 2 {
+                continue;
+            }
+            let gear_ratio = adjacent[0].value * adjacent[1].value;
+            acc += gear_ratio;
+        }
+    }
+    println!("Answer: {acc}");
     Ok(())
 }
 
