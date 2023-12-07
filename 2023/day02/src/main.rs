@@ -125,21 +125,6 @@ impl Game {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-enum PuzzlePart {
-    One,
-    Two,
-}
-
-#[derive(Parser, Debug)]
-#[command()]
-struct Args {
-    path: String,
-
-    #[arg(short, long, value_enum)]
-    part: PuzzlePart,
-}
-
 fn iter_games(path: &str) -> Result<impl Iterator<Item = Result<Game, String>>, String> {
     let file = fs::File::open(path).map_err(|err| err.to_string())?;
     let reader = std::io::BufReader::new(file);
@@ -186,6 +171,21 @@ fn run_2(path: &str) -> Result<(), String> {
     println!("Answer: {acc}");
 
     Ok(())
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum PuzzlePart {
+    One,
+    Two,
+}
+
+#[derive(Parser, Debug)]
+#[command()]
+struct Args {
+    path: String,
+
+    #[arg(short, long, value_enum)]
+    part: PuzzlePart,
 }
 
 fn main() -> Result<(), String> {
