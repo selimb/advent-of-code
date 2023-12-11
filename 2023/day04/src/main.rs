@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::BufRead;
 
@@ -38,7 +38,7 @@ fn main() -> Result<(), String> {
 }
 
 fn run_1(path: &String) -> Result<(), String> {
-    let file = fs::File::open(&path).map_err(|err| err.to_string())?;
+    let file = fs::File::open(path).map_err(|err| err.to_string())?;
     let mut reader = std::io::BufReader::new(file);
 
     let mut acc = 0;
@@ -52,12 +52,41 @@ fn run_1(path: &String) -> Result<(), String> {
     Ok(())
 }
 
-fn run_2(_path: &String) -> Result<(), String> {
-    todo!("")
+fn run_2(path: &String) -> Result<(), String> {
+    let file = fs::File::open(path).map_err(|err| err.to_string())?;
+    let mut reader = std::io::BufReader::new(file);
+
+    let mut card_copies = HashMap::new();
+    let mut acc = 0;
+    for (idx, card) in iter_cards(&mut reader).enumerate() {
+        let lineno = idx + 1;
+        let card = card.map_err(|err| format!("Failed to parse card on line {lineno}: {err}"))?;
+
+        // Always count the original card.
+        acc += 1;
+        let copy_count_curr = card_copies.remove(&card.id).unwrap_or(0);
+        // Accumulate copies.
+        println!("{}: found {} copies", card.id, copy_count_curr);
+        acc += copy_count_curr;
+
+        // Find next copies.
+        let match_count = card.find_winning_in_hand();
+        println!("{}: matched {}", card.id, match_count);
+        for i in 1..match_count + 1 {
+            let card_id_copy = card.id + i;
+            let copy_count = card_copies.entry(card_id_copy).or_insert(0);
+            *copy_count += 1 + copy_count_curr;
+            println!(
+                "{}: copying {} (count={})",
+                card.id, card_id_copy, copy_count
+            )
+        }
+    }
+    println!("Answer: {acc}");
+    Ok(())
 }
 
 struct Card {
-    #[allow(dead_code)]
     id: usize,
     winning: HashSet<u16>,
     hand: HashSet<u16>,
@@ -65,13 +94,17 @@ struct Card {
 
 impl Card {
     fn compute_score(&self) -> i64 {
-        let match_count: usize = self.hand.intersection(&self.winning).count();
+        let match_count: usize = self.find_winning_in_hand();
         let score = if match_count == 0 {
             0
         } else {
             2_i64.pow((match_count - 1).try_into().unwrap())
         };
         score
+    }
+
+    fn find_winning_in_hand(&self) -> usize {
+        self.hand.intersection(&self.winning).count()
     }
 }
 
