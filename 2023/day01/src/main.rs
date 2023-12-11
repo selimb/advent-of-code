@@ -2,6 +2,7 @@ use std::{collections::HashMap, fs, io::BufRead};
 
 use once_cell::sync::Lazy;
 
+#[allow(dead_code)]
 fn parse_calibration_values1(line: &str) -> Result<u8, String> {
     let mut first_digit: Option<char> = None;
     let mut last_digit: Option<char> = None;
