@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::BufRead;
@@ -50,7 +51,6 @@ fn run_1(path: &str) -> Result<()> {
     // NOTE: This is slightly more complicated than it should be, since we try to
     // simultaneously parse and process.
     loop {
-        // src_curr = "asd".to_string();
         let map = match read_map(&mut reader, &src_curr) {
             Ok(Some(map)) => Ok(map),
             Ok(None) => break,
@@ -80,8 +80,83 @@ fn run_1(path: &str) -> Result<()> {
     Ok(())
 }
 
-fn run_2(_path: &str) -> Result<()> {
-    todo!()
+fn run_2(path: &str) -> Result<()> {
+    let file = fs::File::open(path).map_err(|err| err.to_string())?;
+    let mut reader = std::io::BufReader::new(file);
+
+    let seed_ranges = read_seed_ranges(&mut reader)?;
+    let mut almanac: Vec<Map> = vec![];
+    // NOTE: Can't parse+process as we did in part one, because there are too many damn seeds!
+    //   So we instead parse the entire almanac, and then loop over seeds.
+    loop {
+        let map = match read_map(&mut reader, almanac.last().map_or("seed", |map| &map.dst)) {
+            Ok(Some(map)) => Ok(map),
+            Ok(None) => break,
+            Err(err) => Err(err),
+        }?;
+        almanac.push(map);
+    }
+    match almanac.last() {
+        Some(map) => {
+            if map.dst != "location" {
+                return Err(format!(
+                    "Expected last map destination to be 'location'. Got '{}'.",
+                    map.dst
+                ));
+            }
+        }
+        None => {
+            return Err("Empty almanac!".to_string());
+        }
+    }
+
+    let location_id = par_find_lowest_location(seed_ranges, almanac);
+    println!("Answer: {location_id}");
+
+    Ok(())
+}
+
+fn par_find_lowest_location(seed_ranges: Vec<SeedRange>, almanac: Vec<Map>) -> Id {
+    // use rayon::prelude::*;
+    use std::ops::Rem;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::time::Instant;
+
+    // Logging stuff
+    let start = Instant::now();
+    let seed_count: Id = seed_ranges.iter().map(|r| r.len).sum();
+    let counter = Arc::new(Mutex::new(0_i64));
+    let log_every = ((seed_count as f64) / 100.0).ceil() as i64;
+
+    let seed_ids = seed_ranges
+        .iter()
+        .flat_map(|seed_range| (seed_range.start..seed_range.start + seed_range.len));
+    let best_location = seed_ids
+        // TODO: This is slower with par_bridge o.O?
+        // .par_bridge()
+        .map(|seed_id| -> Id {
+            let location_id = &almanac
+                .iter()
+                .fold(seed_id, |id_curr, map| map.lookup(id_curr));
+
+            let counter_new = {
+                let mut c = counter.lock().unwrap();
+                *c = *c + 1;
+                *c
+            };
+            if counter_new.rem(log_every) == 0 {
+                let elapsed = (Instant::now() - start).as_secs_f32();
+                let percent = (counter_new as f64) / (seed_count as f64) * 100_f64;
+                println!("[{elapsed:.2}] {counter_new} / {seed_count} ({percent:.0} %)");
+            }
+
+            *location_id
+        })
+        .min()
+        .unwrap();
+
+    best_location
 }
 
 type Id = i64;
@@ -100,6 +175,31 @@ fn read_seeds<R: BufRead>(reader: &mut R) -> Result<HashSet<Id>> {
     let (_, seeds) = line.split_once(":").unwrap();
 
     let seeds: HashSet<Id> = parse_space_sep_numbers(seeds).collect();
+    Ok(seeds)
+}
+
+struct SeedRange {
+    start: Id,
+    len: Id,
+}
+
+fn read_seed_ranges<R: BufRead>(reader: &mut R) -> Result<Vec<SeedRange>> {
+    let line = reader
+        .lines()
+        .next()
+        .ok_or_else(|| "Unexpected EOF")?
+        .map_err(|err| err.to_string())?;
+    if !line.starts_with("seeds:") {
+        return Err(format!(
+            "Expected line to start with 'seeds: '. Got '{line}'."
+        ));
+    }
+    let (_, seeds) = line.split_once(":").unwrap();
+
+    let seeds = parse_space_sep_numbers(seeds)
+        .tuples()
+        .map(|(start, len)| SeedRange { start, len })
+        .collect();
     Ok(seeds)
 }
 
