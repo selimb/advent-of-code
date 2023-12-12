@@ -33,8 +33,8 @@ fn run_1(path: &str) -> Result<(), String> {
     let reader = std::io::BufReader::new(file);
     let mut lines = reader.lines();
 
-    let times = parse_line(&lines.next().unwrap().unwrap());
-    let records = parse_line(&lines.next().unwrap().unwrap());
+    let times = parse_line1(&lines.next().unwrap().unwrap());
+    let records = parse_line1(&lines.next().unwrap().unwrap());
     let races = times.iter().zip(records.iter()).map(|(time, record)| Race {
         time: *time,
         record: *record,
@@ -50,12 +50,32 @@ fn run_1(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn run_2(_path: &str) -> Result<(), String> {
-    todo!();
+fn run_2(path: &str) -> Result<(), String> {
+    let file = fs::File::open(&path).map_err(|err| err.to_string())?;
+    let reader = std::io::BufReader::new(file);
+    let mut lines = reader.lines();
+
+    let time = parse_line2(&lines.next().unwrap().unwrap());
+    let record = parse_line2(&lines.next().unwrap().unwrap());
+    let race = Race { time, record };
+
+    let ret = calc_beat_record(&race).len();
+
+    println!("Answer: {ret}");
+    Ok(())
 }
 
-fn parse_line(line: &str) -> Vec<i64> {
+fn parse_line1(line: &str) -> Vec<i64> {
     parse_space_sep_numbers(line.split_once(":").unwrap().1.trim()).collect()
+}
+
+fn parse_line2(line: &str) -> i64 {
+    line.split_once(":")
+        .unwrap()
+        .1
+        .replace(" ", "")
+        .parse()
+        .unwrap()
 }
 
 fn parse_space_sep_numbers<'a>(s: &'a str) -> impl Iterator<Item = i64> + 'a {
